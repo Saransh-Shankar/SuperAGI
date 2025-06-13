@@ -1,16 +1,17 @@
-from typing import Type, Optional
+from typing import Type, Optional, List, Dict
 import requests
 import time
 
 from pydantic import BaseModel, Field
+from superagi.models.toolkit import Toolkit
 from superagi.resource_manager.file_manager import FileManager
 from superagi.tools.base_tool import BaseTool
 
 
 class CambAIVoiceGenInput(BaseModel):
     text: str = Field(..., description="The text to be converted to speech")
-    voice_id: int = Field(..., description="The ID of the voice to be used for conversion")
-    language: int = Field(..., description="The language of the text to be converted to speech")
+    voice_id: int = Field(20303, description="The ID of the voice to be used for conversion (default: 20303)")
+    language: int = Field(1, description="The language of the text to be converted to speech (default: 1 for English)")
     output_file_path: str = Field(..., description="The path of the output audio file")
 
 class CambAIVoiceGenTool(BaseTool):
@@ -25,16 +26,19 @@ class CambAIVoiceGenTool(BaseTool):
     """
     name: str = "CambAIVoiceGenTool"
     args_schema: Type[BaseModel] = CambAIVoiceGenInput
-    description: str = "A tool for converting text to speech using CambAI's voice generation API"
+    description: str = "A tool for converting text to speech using CambAI's voice generation API. Default voice_id is 20303 and language is 1 (English)."
+    agent_id: int = None
+    agent_execution_id: int = None
     resource_manager: Optional[FileManager] = None
 
-    def _execute(self, text: str, voice_id: int, language: int, output_file_path: str):
+    def _execute(self, text: str, voice_id: int = 20303, language: int = 1, output_file_path: str = "output.wav"):
         """
         Execute the CambAI voice generation tool.
         
         Args:
             text (str): The text to convert to speech.
-            voice_id (int): The ID of the voice to use.
+            voice_id (int): The ID of the voice to use (default: 20303).
+            language (int): The language ID (default: 1 for English).
             output_file_path (str): The name of the output audio file.
         
         Returns:
@@ -44,11 +48,12 @@ class CambAIVoiceGenTool(BaseTool):
         if api_key is None:
             return "Error: Missing CambAI API key."
         
-        if voice_id is None:
-            voice_id = 20303
+        session = self.toolkit_config.session
+        toolkit = session.query(Toolkit).filter(Toolkit.id == self.toolkit_config.toolkit_id).first()
+        organisation_id = toolkit.organisation_id
 
-        if language is None:
-            language = 1
+        if not output_file_path.lower().endswith('.wav'):
+            output_file_path = f"{output_file_path}.wav"
             
         try:
             # API base URL
@@ -58,7 +63,7 @@ class CambAIVoiceGenTool(BaseTool):
             payload = {
                 "text": text,
                 "voice_id": voice_id,
-                "language": 1
+                "language": language
             }
             
             headers = {
